@@ -1,201 +1,7 @@
 
-import fs from "node:fs";
-import path from "node:path"
-import { GlyphProcessingInfo, GlyphProviderResult, GlyphProviderWithKerningResult, IGlyphProvider, IGlyphProviderWithKerning, BitmapFormat, Range, ToUint8Array, UNICODE_PRIVATE_USE_AREA, concat, formatedTimestamp } from './utils';
+import { IGlyphProvider, IGlyphProviderWithKerning, BitmapFormat, formatedTimestamp } from './utils';
 import { CharacterMap0Tiny } from './utils';
 import { GlyphDesc } from './utils';
-import * as Canvas from "canvas";
-import { Font, Glyph } from "opentype.js";
-import { codepoint2glyphindex } from "./opentype_extensions";
-
-export class TtfGlyphProvider extends GlyphProviderWithKerningResult implements IGlyphProviderWithKerning {
-	public glyphsDesc: Array<GlyphDesc> = [];
-
-	public fontUnitsPerEm: number = 0;
-	public leftKerningClassCnt: number = 0;
-	public rightKerningClassCnt: number = 0;
-	public leftrightKerningClass2kerningValue: Array<number> = [];
-
-	private buildClassBasedKernings(font: Font, glyphProcessingInfo: Array<GlyphProcessingInfo>) {
-
-		const gposKerning = (<any>font).position.defaultKerningTables;
-		const subtable = gposKerning[0].subtables[1];
-		var classes2kerning: Array<number> = [];
-		for (let leftClass = 0; leftClass < subtable.class1Count; leftClass++) {
-			for (let rightClass = 0; rightClass < subtable.class2Count; rightClass++) {
-				const pair = subtable.classRecords[leftClass][rightClass];
-				classes2kerning.push(pair.value1 && pair.value1.xAdvance || 0);
-			}
-		}
-
-		//subtable.classRecords.forEach((i)=>{classes2kerning.push(i.value1 && i.value1.xAdvance || 0)})
-		this.leftrightKerningClass2kerningValue = classes2kerning;
-		this.leftKerningClassCnt = subtable.class1Count;
-		this.rightKerningClassCnt = subtable.class2Count;
-	}
-	//@Obsolete
-	private buildGlyphDescriptionAndAddToBitmap(info: GlyphProcessingInfo): GlyphDesc {
-		var debug = false;
-		if (info.codepointSource == 72) {
-			debug = true;
-		}
-		var g = info.font.glyphs.get(info.glyphIndexSource);
-		var canvas = Canvas.createCanvas(16, 16);
-		var ctx: any = canvas.getContext("2d");
-		g.draw(ctx, 0, 16, 16, <any>{ hinting: true });
-
-		var offsetX = 0;
-		var top8vec: Uint8Array = new Uint8Array(16);
-		var bot8vec: Uint8Array = new Uint8Array(16);
-		if (debug) {
-			fs.writeFileSync("./glyph" + info.codepointSource + ".png", canvas.toBuffer());
-		}
-		for (let x = 0; x < 16; x++) {
-			var top8 = ctx.getImageData(x, 0, 1, 8);
-			top8vec[x] = (imageData2bitmap(top8));
-			var bottom8 = ctx.getImageData(x, 8, 1, 8);
-			bot8vec[x] = (imageData2bitmap(bottom8));
-		}
-		var offsetX = 0;
-		while (top8vec[offsetX] == 0 && bot8vec[offsetX] == 0) {
-			offsetX++;
-		}
-		var w = 16 - offsetX;
-		while (w > 0 && top8vec[offsetX + w] == 0 && bot8vec[offsetX + w] == 0) {
-			w--;
-		}
-		top8vec = top8vec.slice(offsetX, offsetX + w);
-		bot8vec = bot8vec.slice(offsetX, offsetX + w);
-
-		return null;
-	}
-
-	Provide(): Promise<GlyphProviderWithKerningResult> {
-		var glyphIndexes: Array<GlyphProcessingInfo> = [];
-		const gposKerning = (<any>this.font).position.defaultKerningTables;
-		const subtable = gposKerning[0].subtables[1];
-
-		var relocatedCodepoint = UNICODE_PRIVATE_USE_AREA;
-		this.codepointRanges.forEach(r => {
-			for (let codePoint = r.startIncl; codePoint < r.endExcl; codePoint++) {
-				var glyphIndexTtf = codepoint2glyphindex(this.font, codePoint);
-				if (!glyphIndexTtf) continue;
-				var g: Glyph = this.font.glyphs.get(glyphIndexTtf);
-				var leftClass=(<any>this.font).position.getGlyphClass(subtable.classDef1, glyphIndexTtf)
-				var rightClass=((<any>this.font).position.getGlyphClass(subtable.classDef2, glyphIndexTtf));
-				var canvas = Canvas.createCanvas(16, 16);
-				var ctx: any = canvas.getContext("2d");
-				g.draw(ctx, 0, 16, 16, <any>{ hinting: true });
-
-				var offsetX = 0;
-				var top8vec: Uint8Array = new Uint8Array(16);
-				var bot8vec: Uint8Array = new Uint8Array(16);
-
-				for (let x = 0; x < 16; x++) {
-					var top8 = ctx.getImageData(x, 0, 1, 8);
-					top8vec[x] = (imageData2bitmap(top8));
-					var bottom8 = ctx.getImageData(x, 8, 1, 8);
-					bot8vec[x] = (imageData2bitmap(bottom8));
-				}
-				var offsetX = 0;
-				while (top8vec[offsetX] == 0 && bot8vec[offsetX] == 0) {
-					offsetX++;
-				}
-				var w = 16 - offsetX;
-				while (w > 0 && top8vec[offsetX + w] == 0 && bot8vec[offsetX + w] == 0) {
-					w--;
-				}
-				top8vec = top8vec.slice(offsetX, offsetX + w);
-				bot8vec = bot8vec.slice(offsetX, offsetX + w);
-				if (this.relocateToUnicodePrivateUseArea) {
-					this.glyphsDesc.push(new GlyphDesc(relocatedCodepoint, g.name, g.advanceWidth, w, 16, offsetX, 0, leftClass, rightClass, BitmapFormat.ONE_BPP_EIGHT_IN_A_COLUMN, concat(top8vec, bot8vec)));
-					relocatedCodepoint++;
-				} else {
-					this.glyphsDesc.push(new GlyphDesc(codePoint, g.name, g.advanceWidth, w, 16, offsetX, 0, leftClass, rightClass, BitmapFormat.ONE_BPP_EIGHT_IN_A_COLUMN, concat(top8vec, bot8vec)));
-				}
-
-			}
-		});
-		return new Promise((resolve, reject)=>{resolve(this);});
-	}
-
-	constructor(private font: opentype.Font, private codepointRanges: Range[], private relocateToUnicodePrivateUseArea: boolean) {super() }
-
-}
-
-export class GlcdFontProvider extends GlyphProviderResult implements IGlyphProvider {
-	public glyphsDesc: Array<GlyphDesc> = [];
-	constructor(private fileRelativeToThisSourceFile: string) { super() }
-	
-	async Provide(): Promise<GlyphProviderResult> {
-		const fontModule = await import(this.fileRelativeToThisSourceFile)
-		var data = <number[]>fontModule.default;
-		var sizeInBytes = data[1] << 8 + data[0];
-		var glyphWidth = data[2];
-		var glyphHeight = data[3];
-		var codePointFirstGlyph = data[4];
-		var codepointsCnt = data[5];
-		var bitmapIndex=6+codepointsCnt;;
-		for (var i = 0; i < codepointsCnt; i++) {
-			var width = data[6 + i];
-			var top8vec =data.slice(bitmapIndex, bitmapIndex + width);
-			var bot8vec = data.slice(bitmapIndex + width, bitmapIndex + 2 * width)
-			bot8vec.forEach((v,i,a)=>{a[i]>>=2});
-				
-			var glyphDesc = new GlyphDesc(codePointFirstGlyph + i, String.fromCodePoint(codePointFirstGlyph + i), width+2, width, 16, 0, 0, 0,0, BitmapFormat.ONE_BPP_EIGHT_IN_A_COLUMN, ToUint8Array(top8vec, bot8vec));
-			this.glyphsDesc.push(glyphDesc)
-			bitmapIndex += (2 * width);
-		}
-		return this;
-	}
-}
-
-export class SvgDirectoryGlyphProvider extends GlyphProviderResult implements IGlyphProvider {
-	constructor(private directory: string, private beginCodepoint: number) { super(); }
-	public glyphsDesc: Array<GlyphDesc> = [];
-	async Provide(): Promise<GlyphProviderResult> {
-		var codePoint = this.beginCodepoint;
-		var files = fs.readdirSync(this.directory);
-		for (let file of files) {
-			var debug = false;
-			var fileWithoutExt = path.parse(file).name;
-			var canvas = Canvas.createCanvas(32, 32);
-			var ctx: any = canvas.getContext("2d");
-			var image = await Canvas.loadImage(path.join(this.directory, file));
-			ctx.drawImage(image, 0, 0);
-			if (debug) {
-				fs.writeFileSync(fileWithoutExt + ".png", canvas.toBuffer());
-			}
-			var top8vec: Uint8Array = new Uint8Array(16);
-			var bot8vec: Uint8Array = new Uint8Array(16);
-
-			for (let x = 0; x < 16; x++) {
-				var top8 = ctx.getImageData(2 * x, 0, 1, 16);
-				top8vec[x] = (imageData2bitmap(top8, 2));
-				var bottom8 = ctx.getImageData(2 * x, 16, 1, 16);
-				bot8vec[x] = (imageData2bitmap(bottom8, 2));
-			}
-			var offsetX = 0;
-			while (top8vec[offsetX] == 0 && bot8vec[offsetX] == 0) {
-				offsetX++;
-			}
-			var w = 16 - offsetX;
-			while (w > 0 && top8vec[offsetX + w - 1] == 0 && bot8vec[offsetX + w - 1] == 0) {
-				w--;
-			}
-			top8vec = top8vec.slice(offsetX, offsetX + w);
-			bot8vec = bot8vec.slice(offsetX, offsetX + w);
-			if (debug) {
-				console.log(`offsetX=${offsetX}, w=${w}, top8vec=${toHexArray(top8vec)}, bot8vec=${toHexArray(bot8vec)}`);
-			}
-			this.glyphsDesc.push(new GlyphDesc(codePoint, fileWithoutExt, 16, w, 16, offsetX, 0, 0,0, BitmapFormat.ONE_BPP_EIGHT_IN_A_COLUMN, concat(top8vec, bot8vec)));
-
-			codePoint++;
-
-		}
-		return this;
-	}
-}
 
 
 
@@ -203,10 +9,11 @@ export class FontCC{
 
 	public glyphs:Array<GlyphDesc>=[];
 	public characterMaps:Array<CharacterMap0Tiny>=[];
-	public fontUnitsPerEm:number=0;
+	public fontUnitsPerPixel:number=2048;
 	public leftrightKerningClass2kerningValue:Array<number>=[];
 	public leftKerningClassCnt:number=0;
 	public rightKerningClassCnt:number=0;
+	public lineHeight:number=0;
 
 	private constructor(){}
 
@@ -242,15 +49,25 @@ export class FontCC{
 			var res = await mainProvider.Provide();
 			this.buildAndAddCmaps(res.glyphsDesc, this.glyphs.length);
 			this.glyphs.push(...res.glyphsDesc)
-			this.fontUnitsPerEm=res.fontUnitsPerEm;
 			this.leftrightKerningClass2kerningValue=res.leftrightKerningClass2kerningValue;
 			this.leftKerningClassCnt=res.leftKerningClassCnt;
 			this.rightKerningClassCnt=res.rightKerningClassCnt;
-		}
-		for(var pIndex=0; pIndex<otherProviders.length;pIndex++){
-			var resx = await otherProviders[pIndex].Provide();
+			this.lineHeight=resx.lineHeight;
+			for(var pIndex=0; pIndex<otherProviders.length;pIndex++){//start at 0!!!
+				var resx = await otherProviders[pIndex].Provide();
+				this.buildAndAddCmaps(resx.glyphsDesc, this.glyphs.length);
+				this.glyphs.push(...resx.glyphsDesc)
+			}
+		}else{
+			var resx = await otherProviders[0].Provide();
 			this.buildAndAddCmaps(resx.glyphsDesc, this.glyphs.length);
 			this.glyphs.push(...resx.glyphsDesc)
+			this.lineHeight=resx.lineHeight;
+			for(var pIndex=1; pIndex<otherProviders.length;pIndex++){//start at 1!!!
+				var resx = await otherProviders[pIndex].Provide();
+				this.buildAndAddCmaps(resx.glyphsDesc, this.glyphs.length);
+				this.glyphs.push(...resx.glyphsDesc)
+			}
 		}
 		return this;
 	}
@@ -269,7 +86,7 @@ export class FontCC{
 			var g = this.glyphs[gi];
 			bitmap += `/* ${g.name} codepoint=${g.codepointDest},  glyphindex=${gi}, width=${g.box_w}*/ ${g.box_w>0?toHexArray(g.bitmap)+",":""}\n`;
 			glyphDescStr+=g.toCppConstructorString(bitmapIndex, gi);
-			bitmapIndex += (2 * g.box_w);
+			bitmapIndex+=g.bitmap.byteLength;
 		}
 
 		var cmaps="";
@@ -283,7 +100,7 @@ export class FontCC{
 		ret+=`constexpr std::initializer_list<GlyphDesc> glyph_desc={\n${glyphDescStr}\n};\n\n`
 		ret+=`constexpr std::initializer_list<CharacterMap0Tiny> cmaps={\n${cmaps}\n};\n\n`
 		ret+=`constexpr std::initializer_list<int16_t> kern_class_values = {${this.leftrightKerningClass2kerningValue}};\n\n`
-		ret+=`constexpr const FontDesc font = FontDesc(\n\t${this.fontUnitsPerEm}, \n\t${this.leftKerningClassCnt}, \n\t${this.rightKerningClassCnt},\n\t&kern_class_values,\n\t${this.characterMaps.length},\n\t&cmaps,\n\t&glyph_desc,\n\t&glyph_bitmap,\n\t16,\n\t0);\n`
+		ret+=`constexpr const FontDesc font = FontDesc(\n\t${this.leftKerningClassCnt}, \n\t${this.rightKerningClassCnt},\n\t&kern_class_values,\n\t${this.characterMaps.length},\n\t&cmaps,\n\t&glyph_desc,\n\t&glyph_bitmap,\n\t${this.lineHeight},\n\t0);\n`
 		ret+="}"
 		return ret;
 	}

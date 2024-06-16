@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+"name": "ts-node",
+      "type": "node",
+      "request": "launch",
+      //"args": ["${relativeFile}"],//this means: the file, that is currently shown in the editor
+      "args": ["./g2b/g2b.ts"],
+      "runtimeArgs": ["-r", "ts-node/register"],
+      "cwd": "${workspaceRoot}",
+      "internalConsoleOptions": "openOnSessionStart"
+    }
+  ]
+}

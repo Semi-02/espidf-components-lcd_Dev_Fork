@@ -1,6 +1,7 @@
 import { Font } from 'opentype.js';
 
 export const UNICODE_PRIVATE_USE_AREA = 57344; //57344
+export const FONT_UNITS_PER_PIXEL = 128;
 
 export class Range {
 	constructor(public readonly startIncl: number, public readonly endExcl: number) { }
@@ -32,11 +33,13 @@ export class GlyphDesc {
 	}
 }
 
-export function concat(a: Uint8Array, b: Uint8Array, c: Uint8Array=new Uint8Array()): Uint8Array {
-	var d = new Uint8Array(a.length + b.length + c.length);
-	d.set(a, 0);
-	d.set(b, a.length);
-	d.set(c, a.length + b.length);
+export function concat(a: Array<Uint8Array>): Uint8Array {
+	var d = new Uint8Array(a.reduce<number>((total, value)=>total+value.length, 0));
+    var pos=0;
+    for(var i=0;i<a.length;i++){
+        d.set(a[i], pos)
+        pos+=a[i].length;
+    }
 	return d;
 }
 
@@ -58,13 +61,15 @@ export function formatedTimestamp() {
 }
 
 export class GlyphProviderResult{
-
+    //public fontUnitsPerPixel:number; --> Nein, Wir normalisieren und gehen immer von 128 Einheiten pro Pixel aus
+    public lineHeight:number;
     public glyphsDesc:Array<GlyphDesc>;
 }
 
 export class GlyphProviderWithKerningResult{
+    public lineHeight:number;
     public glyphsDesc:Array<GlyphDesc>;
-    public fontUnitsPerEm:number;
+    //public fontUnitsPerPixel:number; --> Nein, Wir normalisieren und gehen immer von 128 Einheiten pro Pixel aus
     public leftKerningClassCnt:number;
     public rightKerningClassCnt:number;
     public leftrightKerningClass2kerningValue:Array<number>;

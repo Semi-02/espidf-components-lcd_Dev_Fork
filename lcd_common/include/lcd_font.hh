@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
+#include <cmath>
 #include <vector>
 #include <initializer_list>
 #include <esp_log.h>
@@ -65,7 +66,6 @@ namespace lcd_common
     class FontDesc
     {
     public:
-        const uint16_t unitsPerEm;
         const uint8_t leftKerningClassCnt;
         const uint8_t rightKerningClassCnt;
         const std::initializer_list<int16_t> *kern_class_values;
@@ -113,7 +113,6 @@ namespace lcd_common
         }
 
         constexpr FontDesc(
-            const uint16_t unitsPerEm,
             const uint8_t leftKerningClassCnt,
             const uint8_t rightKerningClassCnt,
             const std::initializer_list<int16_t> *kern_class_values,
@@ -122,8 +121,7 @@ namespace lcd_common
             const std::initializer_list<GlyphDesc> *glyph_desc,
             const std::initializer_list<uint8_t> *glyph_bitmap,
             const int8_t line_height,
-            const int8_t base_line) : unitsPerEm(unitsPerEm),
-                                      leftKerningClassCnt(leftKerningClassCnt),
+            const int8_t base_line) : leftKerningClassCnt(leftKerningClassCnt),
                                       rightKerningClassCnt(rightKerningClassCnt),
                                       kern_class_values(kern_class_values),
                                       cmapsLen(cmapsLen),
@@ -140,6 +138,8 @@ namespace lcd_common
                                               68, 85, 102, 119,
                                               136, 153, 170, 187,
                                               204, 221, 238, 255};
+    constexpr int UNITS_PER_PIXEL{128};
+
 class GlyphHelper
     {
         public:
@@ -156,12 +156,11 @@ class GlyphHelper
             //second tab is right and right-aligned
             size_t glyphBeforeTabulator[2]={UINT32_MAX, UINT32_MAX};
             
-            uint16_t posX = PADDING_LEFT-currentGlyph->ofs_x;
+            uint32_t posX_units = (PADDING_LEFT-currentGlyph->ofs_x)*UNITS_PER_PIXEL;
             uint16_t endX{0};
             uint8_t tabIndex=0;
             while (currentCodepoint)
             {
-                
                 nextCodepoint = unicode_utils::getCodepointAndAdvancePointer(&chars);
                 int32_t kv;
                 if(nextCodepoint=='\t' && tabIndex<2){
@@ -185,19 +184,17 @@ class GlyphHelper
 
                 GlyphHelper gh = {};
                 gh.glyph_dsc = currentGlyph;
-                gh.startX = posX + gh.glyph_dsc->ofs_x;
+                gh.startX = ((posX_units + UNITS_PER_PIXEL) / UNITS_PER_PIXEL) + gh.glyph_dsc->ofs_x;//round up pixel value, see https://stackoverflow.com/questions/2745074/fast-ceiling-of-an-integer-division-in-c-c
                
                 endX = gh.startX + gh.glyph_dsc->box_w;
                 if (endX >= LINE_WIDTH_PIXELS)
                 {
-                    ESP_LOGW(TAG, "NOT push GlyphIndex, posX=%d endX=%d, startX=%d", posX, endX, gh.startX);
+                    ESP_LOGW(TAG, "NOT push GlyphIndex, posX=%lu endX=%d, startX=%d", posX_units, endX, gh.startX);
                     break; // Damit ist sicher gestellt, dass man bei der Ausgabe keinerlei überprüfung machen muss, ob irgendwelche Grenzen überschritten werden -->einfach glyphs zeichnen und gut!
                 }
-                if(font->unitsPerEm==0){
-                    posX += (gh.glyph_dsc->adv_w + kv);
-                }else{
-                    posX += ((gh.glyph_dsc->adv_w + kv) + (1 << 6)) >> 7;
-                }
+                ESP_LOGD(TAG, "Pushed GlyphIndex, posX=%lu endX=%d, startOfBitmapX=%d", posX_units, endX, gh.startX);
+                
+                posX_units += gh.glyph_dsc->adv_w + kv;
                 glyphs.push_back(gh);
                 currentCodepoint=nextCodepoint;
                 currentGlyph=nextGlyph;
@@ -231,7 +228,6 @@ class GlyphHelper
                     ESP_LOGD(TAG, "moved Glyph at pos %d to posX=%d",  i, glyphs.at(i).startX);
                     i--;
                 }
-
             }
         }
         
@@ -264,7 +260,7 @@ class GlyphHelper
         {
             int16_t lineInBitmap = line - this->glyph_dsc->ofs_y;
             if(lineInBitmap<0 || lineInBitmap>=this->glyph_dsc->box_h){
-                //Wir sind außerhalb der Bitmap...und schreiben deshalb einfach nur "Hintergrundfarbe in den Buffer"
+                ESP_LOGD(TAG, "We are out of bitmap and just write %i background pixels", glyph_dsc->box_w);
                 for (int x = suppressedPixelIfBackground; x < glyph_dsc->box_w; x++) // x läuft die Breite der Bitmap entlang
                 {
                     // ausgabe nur dann, wenn wir sowieso außerhalb der suppressed sind oder die Farbe Nicht-Hintergrund ist
@@ -276,19 +272,22 @@ class GlyphHelper
             uint32_t bo = this->glyph_dsc->bitmap_index;
             uint16_t lineOf8 = lineInBitmap >> 3;
             uint16_t lineIn8 = lineInBitmap & 7;
+            //char bitsasstring[glyph_dsc->box_w+1];
+            //bitsasstring[glyph_dsc->box_w]=0;
 
             for (int x = 0; x < glyph_dsc->box_w; x++) // x läuft die Breite der Bitmap entlang
             {
                 int indexInBitmap = lineOf8 * glyph_dsc->box_w + x;
                 uint8_t bits = bitmap[bo + indexInBitmap];
                 uint8_t bit = bits & (1 << lineIn8);
-
+                //bitsasstring[x]=bit>0?'X':' ';
                 if (x >= suppressedPixelIfBackground || bit)
                 { // ausgabe nur dann, wenn wir sowieso außerhalb der suppressed sind oder die Farbe Nicht-Hintergrund ist
                     buffer_at_correct_position[x] = bit ? colors[15] : colors[0];
                 }
-                
             }
+            //ESP_LOGI(TAG, "Glyph@%i line=%d: %s", this->startX, line, bitsasstring);
+            
             return glyph_dsc->box_w;
         }
 
@@ -343,6 +342,11 @@ class GlyphHelper
 }
 
 namespace arial_and_symbols_16px1bpp
+{
+    extern const lcd_common::FontDesc font;
+}
+
+namespace arial_and_symbols_24px1bpp
 {
     extern const lcd_common::FontDesc font;
 }

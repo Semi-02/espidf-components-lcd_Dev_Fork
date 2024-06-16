@@ -1,69 +1,23 @@
 #pragma once
 
-#include <cstdint>
-#include <cstdio>
-#include <vector>
-#include <lcd_interfaces.hh>
-
-#include <esp_log.h>
-#include <symbols.hh>
-#include "esp_system.h"
-#include "nvs_flash.h"
-#include "nvs.h"
-
 #include <esp_log.h>
 #define TAG "MENU"
-
+#include <simple_menu_common.hh>
 using namespace display;
 
 
 namespace menu
 {
-     inline size_t modulo(const int i, const int n)
-    {
-        return (i % n + n) % n;
-    }
-    
-    enum class MenuItemResult
-    {
-        NO_ACTION,
-        REDRAW_SECOND_LINE,
-        OPEN_NEW_FULLSCREEN,
-        CLOSE_MYSELF,
-        REDRAW,
-    };
-    enum class OnOpenFullscreenResult
-    {
-        OK,
-        NOT_OK,                           // for PlaceholderItem
-        NOT_OK_AND_CLOSE_PREVIOUS_WINDOW, // for ReturnItem
-    };
-
-    class MenuItem;
-
-    template <class T>
-    class MenuItemChanged
-    {
-    public:
-        virtual void ValueChanged(const MenuItem *item, T newValue) = 0;
-    };
-    
-    template <class T>
-    class MenuItemChangedWithHandle
-    {
-    public:
-        virtual void ValueChanged(const MenuItem *item, void* referenceOrHandle, T newValue) = 0;
-    };
-
-    class MenuItem
+     
+    class MenuItem:public iValueManager
     {
     protected:
         const char *const name;
 
     public:
         MenuItem(const char *const name) : name(name) {}
-        virtual void RenderCompact(FullLineWriter *lw, int line, bool invert) = 0;
-        virtual void RenderFullScreen(FullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines){};
+        virtual void RenderCompact(iFullLineWriter *lw, int line, bool invert) = 0;
+        virtual void RenderFullScreen(iFullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines){};
         virtual OnOpenFullscreenResult OnOpenFullscreen() { return OnOpenFullscreenResult::OK; } // This is the normal case
         virtual void OnCloseFullscreen() { return; }                                             // This is the normal case
         virtual MenuItemResult Up() { return MenuItemResult::CLOSE_MYSELF; }
@@ -90,7 +44,7 @@ namespace menu
 
     public:
         ConfirmationItem(const char *const name, void* referenceOrHandle, MenuItemChangedWithHandle<bool> *cb = nullptr) : MenuItem(name), referenceOrHandle(referenceOrHandle), cb(cb) {}
-        void RenderCompact(FullLineWriter *lw, int line, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
         {
             lw->printfl(line, invert, "%s" G_LABEL_ALT, name);
         }
@@ -102,7 +56,7 @@ namespace menu
             return MenuItemResult::CLOSE_MYSELF;
         }
 
-        void RenderFullScreen(FullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
+        void RenderFullScreen(iFullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
         {
             if (initial)
             {
@@ -137,7 +91,7 @@ namespace menu
 
     public:
         IntegerItem(const char *const name, int32_t *value, int32_t value_min, int32_t value_max, MenuItemChanged<int32_t> *cb = nullptr) : MenuItem(name), value(value), value_min(value_min), value_max(value_max), cb(cb) {}
-        void RenderCompact(FullLineWriter *lw, int line, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
         {
             lw->printfl(line, invert, "%s\t\t%d", name, *value);
         }
@@ -157,7 +111,7 @@ namespace menu
             return MenuItemResult::CLOSE_MYSELF;
         }
 
-        void RenderFullScreen(FullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
+        void RenderFullScreen(iFullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
         {
             if (initial)
             {
@@ -205,7 +159,7 @@ namespace menu
             return ret;
         }
         
-        void RenderCompact(FullLineWriter *lw, int line, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
         {
             if (*value)
             {
@@ -224,7 +178,7 @@ namespace menu
             return MenuItemResult::CLOSE_MYSELF;
         }
 
-        void RenderFullScreen(FullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
+        void RenderFullScreen(iFullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
         {
             if (initial)
             {
@@ -280,12 +234,12 @@ namespace menu
             return ret;
         }
 
-        void RenderCompact(FullLineWriter *lw, int line, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
         {
             lw->printfl(line, invert, "%s\t\t%.2f", name, *value);
         }
 
-        void RenderFullScreen(FullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
+        void RenderFullScreen(iFullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
         {
             if (initial)
             {
@@ -327,7 +281,7 @@ namespace menu
     {
     public:
         ReturnItem() : MenuItem(G_ARROW_UP G_ARROW_UP G_ARROW_UP G_ARROW_UP) {}
-        void RenderCompact(FullLineWriter *lw, int line, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
         {
             lw->printfl(line, invert, "%s", name);
         }
@@ -339,7 +293,7 @@ namespace menu
     {
     public:
         PlaceholderItem(const char *const name) : MenuItem(name) {}
-        void RenderCompact(FullLineWriter *lw, int line, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
         {
             lw->printfl(line, invert, "%s", name);
         }
@@ -371,7 +325,7 @@ namespace menu
             return ESP_OK;
         }
         
-        void RenderCompact(FullLineWriter *lw, int line, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
         {
             lw->printfl(line, invert, "%s\t\t" G_CHEVRON_RIGHT, name);
         }
@@ -381,7 +335,7 @@ namespace menu
             return content->at(modulo(uncorrected_index, content->size()));
         }
 
-        void RenderFullScreen(FullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
+        void RenderFullScreen(iFullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
         {
             if (initial)
             {
@@ -419,7 +373,7 @@ namespace menu
         }
 
         //OBSOLETE
-        void RenderFullScreen32(FullLineWriter *lw, bool initial, uint8_t textLines)
+        void RenderFullScreen32(iFullLineWriter *lw, bool initial, uint8_t textLines)
         {
             if (initial)
             {
@@ -490,7 +444,7 @@ namespace menu
             return nvs_get_u32(nvs_handle, name, (uint32_t*)&selectedOption);
         }
 
-        void RenderCompact(FullLineWriter *lw, int page, bool invert) override
+        void RenderCompact(iFullLineWriter *lw, int page, bool invert) override
         {
             lw->printfl(page, invert, "%s\t\t%s", name, GetSelectedOptionName());
         }
@@ -511,7 +465,7 @@ namespace menu
             return selectedOption;
         }
 
-        void RenderFullScreen(FullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
+        void RenderFullScreen(iFullLineWriter *lw, bool initial, uint8_t shownLines, uint8_t availableLines) override
         {
             if (initial)
             {
@@ -567,13 +521,13 @@ namespace menu
     {
     private:
         FolderItem *root;
-        FullLineWriter *lw;
+        iFullLineWriter *lw;
         std::vector<MenuItem *> path;
-        uint8_t shownLines;
-        uint8_t availableLines;
+        uint8_t shownLines;//lines visible on screen (ex: ST7789 with line height 24 on a 240x240 display: 10)
+        uint8_t availableLines;//lines in Display ram for scrolling (ex: ST7789 with line height 24: 13, as diplay ram has 320 lines)
 
     public:
-        MenuManagement(FolderItem *root, FullLineWriter *lw) : root(root), lw(lw), shownLines(lw->GetShownLines()), availableLines(lw->GetAvailableLines()) {}
+        MenuManagement(FolderItem *root, iFullLineWriter *lw) : root(root), lw(lw), shownLines(lw->GetShownLines()), availableLines(lw->GetAvailableLines()) {}
 
         void Init()
         {
@@ -637,6 +591,7 @@ namespace menu
             path.back()->OnOpenFullscreen();
             path.back()->RenderFullScreen(lw, true, shownLines, availableLines);
         }
+        
         void Select()
         {
             MenuItem *toOpen{nullptr};

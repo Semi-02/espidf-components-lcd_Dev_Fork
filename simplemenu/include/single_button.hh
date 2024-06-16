@@ -4,7 +4,7 @@
 #include <esp_timer.h>
 #include <time.h>
 #include <sys/time.h>
-#include "simple_menu.hh"
+#include "simple_menu_common.hh"
 
 namespace button{
     enum class ButtonPressResult
@@ -16,5 +16,5 @@ namespace button{
         RELEASED_LONG,
     };
     ButtonPressResult Button(gpio_num_t gpio);
-    ButtonPressResult ButtonLoop(menu::MenuManagement* m, gpio_num_t gpio);
+    ButtonPressResult ButtonLoop(menu::iMenuManagement* m, gpio_num_t gpio);
 }

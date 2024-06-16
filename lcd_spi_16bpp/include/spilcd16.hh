@@ -30,7 +30,7 @@ Achtung. Wenn der Renderer mal false zurück liefert, müssen die Datenstrukture
 
 using namespace display;
 
-#define LCD135x240(lines) 135, 240, 52, 40, (135*lines)
+
 
 namespace spilcd16
 {
@@ -131,6 +131,16 @@ namespace spilcd16
         SYNC_CMD = 8,
     };
 
+    enum class eOrientation{
+        NORMAL   =0b000'00000,
+        EXY_MX_90=0b011'00000,
+        MX_MY_180=0b110'00000,
+        EXY_MY_270=0b101'00000,
+    };
+
+#define LCD135x240_0() 135, 240, 52, 40, eOrientation::NORMAL
+#define LCD135x240_90() 240, 135, 40, 52, eOrientation::EXY_MX_90
+    
     class FilledRectRenderer : public IAsyncRenderer
     {
     private:
@@ -356,7 +366,7 @@ namespace spilcd16
         }
     };
 
-    template <spi_host_device_t spiHost, gpio_num_t mosi, gpio_num_t sclk, gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, uint16_t WIDTH, uint16_t HEIGHT, int16_t OFFSET_X, int16_t OFFSET_Y, size_t PIXEL_BUFFER_SIZE_IN_PIXELS, uint32_t  BACKLIGHT_ON_PWM=4096, uint32_t  BACKLIGHT_OFF_PWM=0>
+    template <spi_host_device_t spiHost, gpio_num_t mosi, gpio_num_t sclk, gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, uint16_t WIDTH, uint16_t HEIGHT, int16_t OFFSET_X, int16_t OFFSET_Y, eOrientation ORIENTATION, size_t PIXEL_BUFFER_SIZE_IN_PIXELS, uint32_t  BACKLIGHT_ON_PWM=4096, uint32_t  BACKLIGHT_OFF_PWM=0>
     class M : public ITransactionCallback, public IRendererHost, public iBacklight
     {
     private:
@@ -495,20 +505,21 @@ namespace spilcd16
             ESP_LOGD(TAG, "Interaction; set off to %llu", backlightOffUs/1000);
             if(this->backlightLevel==BACKLIGHT_ON_PWM) return ErrorCode::OK;
             ESP_LOGD(TAG, "Dim up to %lu", BACKLIGHT_ON_PWM);
-            //ESP_ERROR_CHECK(ledc_set_fade_time_and_start(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, BACKLIGHT_ON_PWM, 500, LEDC_FADE_NO_WAIT));
-            gpio_set_level(bl, 1);
             this->backlightLevel=BACKLIGHT_ON_PWM;
+            ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, this->backlightLevel));
+            ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
+            
             return ErrorCode::OK;
         }
         ErrorCode BacklightLoop() override{
             if (bl == GPIO_NUM_NC) return ErrorCode::OK;
             int64_t nowUs = esp_timer_get_time();
             if(nowUs<=this->backlightOffUs) return ErrorCode::OK;
-            if(this->backlightLevel==BACKLIGHT_OFF_PWM) return ErrorCode::OK;
-            ESP_LOGD(TAG, "Dim Down to %lu", BACKLIGHT_OFF_PWM);
-            //ESP_ERROR_CHECK(ledc_set_fade_time_and_start(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, BACKLIGHT_OFF_PWM, 500, LEDC_FADE_NO_WAIT));
-            gpio_set_level(bl, 0);
-            this->backlightLevel=BACKLIGHT_OFF_PWM;
+            if(this->backlightLevel<=BACKLIGHT_OFF_PWM) return ErrorCode::OK;
+            backlightLevel-=100;
+            backlightLevel=std::max(BACKLIGHT_OFF_PWM, backlightLevel);
+            ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, this->backlightLevel));
+            ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
             return ErrorCode::OK;
         }
 
@@ -604,7 +615,7 @@ namespace spilcd16
 
             if (bl != GPIO_NUM_NC)
             {
-                /*
+                
                 ledc_timer_config_t ledc_timer = {
                     .speed_mode = LEDC_LOW_SPEED_MODE,           // timer mode
                     .duty_resolution = LEDC_TIMER_12_BIT, // resolution of PWM duty
@@ -628,11 +639,6 @@ namespace spilcd16
                 ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
                 // Set configuration of timer0 for high speed channels
                 ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-                ESP_ERROR_CHECK(ledc_fade_func_install(0));
-                */
-                
-                gpio_set_direction(bl, GPIO_MODE_OUTPUT);
-                gpio_set_level(bl, 1);
                 this->Interaction(5000);
             }
             gpio_reset_pin(dc);
@@ -688,14 +694,19 @@ namespace spilcd16
             lcd_data(0x05); // 16bit color format
 
             lcd_cmd(CMD::Memory_Data_Access_Control); // necessary, because not all types of reset set this value to 0x00
-            lcd_data(0x00);
+            lcd_data((uint8_t)ORIENTATION);
 
             lcd_cmd(CMD::Display_Inversion_On); // enable the color inversion mode that is necessary for in-plane switching (IPS) TFT displays.
 
             lcd_cmd(CMD::Display_On);
-
-            FilledRectRenderer rr(Point2D(0, 0), Point2D(135, 240), fillColor);
-            Draw(&rr, true);
+            Point2D endpoint;
+            if(ORIENTATION==eOrientation::NORMAL || ORIENTATION==eOrientation::MX_MY_180){
+                endpoint=Point2D(240, 320);
+            }else{
+                endpoint=Point2D(320, 240);
+            }
+            FilledRectRenderer frr(Point2D(0, 0), endpoint, fillColor);
+            Draw(&frr, false);
         }
 
         ErrorCode FillRectSyncPolling(Point2D start, Point2D end_ex, Color::Color565 col, bool considerOffsetsOfVisibleArea = true)
@@ -867,14 +878,18 @@ namespace spilcd16
             if(fixedBottom+fixedTop>=HEIGHT){
                 return ErrorCode::INVALID_ARGUMENT_VALUES;
             }
+            if(ORIENTATION!=eOrientation::NORMAL)
+                return ErrorCode::FUNCTION_NOT_AVAILABLE;
             this->fixedTop=fixedTop;
             this->fixedBottom=fixedBottom;
             uint16_t TFA=fixedTop+OFFSET_Y;
             uint16_t VSA=HEIGHT-fixedTop-fixedBottom;
-            uint16_t BFA=320-TFA-VSA;
+            
+            uint16_t BFA = 320-TFA-VSA;
+            uint8_t  cmd = CMD::Vertical_scrolling_definition;
             ESP_LOGD(TAG, "defineVerticalStrolling TFA=%d, VSA=%d, BFA=%d", TFA, VSA, BFA);
             const uint16_t data[] ={std::byteswap(TFA), std::byteswap(VSA), std::byteswap(BFA)};
-            lcd_cmd(CMD::Vertical_scrolling_definition);
+            lcd_cmd(cmd);
             lcd_data((const uint8_t*)data, sizeof(uint16_t)*sizeof(data));
             return ErrorCode::OK;
         }
@@ -884,6 +899,8 @@ namespace spilcd16
             if(lineOnTop_0_to_HEIGHT_OF_SCROLL_AREA>=HEIGHT-fixedBottom-fixedTop){
                 return ErrorCode::INVALID_ARGUMENT_VALUES;
             }
+            if(ORIENTATION!=eOrientation::NORMAL)
+                return ErrorCode::FUNCTION_NOT_AVAILABLE;
             uint16_t value = lineOnTop_0_to_HEIGHT_OF_SCROLL_AREA+OFFSET_Y+fixedTop;
             const uint16_t data[] ={std::byteswap(value)};
             lcd_cmd(CMD::Vertical_Scrolling_Start_Address);

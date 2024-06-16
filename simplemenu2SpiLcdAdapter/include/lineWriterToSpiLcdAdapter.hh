@@ -11,7 +11,7 @@ using namespace spilcd16;
 namespace display
 {
     template <uint8_t LINE_HEIGHT_PIXELS, uint8_t LINE_WIDTH_PIXELS, uint8_t PADDING_LEFT, uint8_t PADDING_RIGHT>
-    class LineWriterToSpiLcdAdapter : public FullLineWriter
+    class LineWriterToSpiLcdAdapter : public iFullLineWriter
     {
     private:
         IRendererHost *host;

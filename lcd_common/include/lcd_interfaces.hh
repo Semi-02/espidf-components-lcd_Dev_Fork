@@ -4,7 +4,7 @@
 #include <common.hh>
 namespace display
 {
-    class FullLineWriter
+    class iFullLineWriter
     {
     public:
         virtual size_t printfl(int line, bool invert, const char *format, ...) = 0;
@@ -13,6 +13,14 @@ namespace display
         virtual void Scroll(int textLines) = 0;
         virtual uint8_t GetShownLines() = 0;
         virtual uint8_t GetAvailableLines() = 0;
+    };
+
+    class iFullLineWriterWithoutHardwareScrolling
+    {
+    public:
+        virtual size_t printfl(int line, bool invert, const char *format, ...) = 0;
+        virtual void clearLines(int startLineIncl, int endLineExc)=0;
+        virtual uint8_t GetShownLines() = 0;
     };
 
 
