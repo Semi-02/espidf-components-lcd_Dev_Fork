@@ -11,20 +11,19 @@ using namespace spilcd16;
 namespace display
 {
     template <uint8_t LINE_HEIGHT_PIXELS, uint8_t LINE_WIDTH_PIXELS, uint8_t PADDING_LEFT, uint8_t PADDING_RIGHT>
-    class LineWriterToSpiLcdAdapter : public iFullLineWriter
+    class LineWriterToSpiLcdAdapterHwScroll : public iFullLineWriter
     {
     private:
         IRendererHost *host;
-        uint8_t lineHeight;
         FilledRectRenderer *frr;
         FullTextlineRenderer<LINE_HEIGHT_PIXELS, LINE_WIDTH_PIXELS, PADDING_LEFT, PADDING_RIGHT> *ftlr;
         uint8_t startline_px{0};
 
     public:
-        LineWriterToSpiLcdAdapter(IRendererHost *host, uint8_t lineHeight) : host(host), lineHeight(lineHeight)
+        LineWriterToSpiLcdAdapterHwScroll(IRendererHost *host, const lcd_common::FontDesc* const font) : host(host)
         {
             frr = new FilledRectRenderer(Point2D(0, 0), Point2D(240, 320), Color::BLACK);
-            ftlr = new FullTextlineRenderer<LINE_HEIGHT_PIXELS, LINE_WIDTH_PIXELS, PADDING_LEFT, PADDING_RIGHT>(&arial_and_symbols_16px1bpp::font);
+            ftlr = new FullTextlineRenderer<LINE_HEIGHT_PIXELS, LINE_WIDTH_PIXELS, PADDING_LEFT, PADDING_RIGHT>(font);
         }
 
         size_t printfl(int line, bool invert, const char *format, ...) override
