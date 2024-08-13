@@ -138,8 +138,9 @@ namespace spilcd16
         EXY_MY_270=0b101'00000,
     };
 
-#define LCD135x240_0() 135, 240, 52, 40, eOrientation::NORMAL
-#define LCD135x240_90() 240, 135, 40, 52, eOrientation::EXY_MX_90
+#define LCD135x240_0 135, 240, 52, 40, spilcd16::eOrientation::NORMAL
+#define LCD135x240_90 240, 135, 40, 52, spilcd16::eOrientation::EXY_MX_90
+#define LCD240x240_0 240, 240, 40, 0, spilcd16::eOrientation::NORMAL
     
     class FilledRectRenderer : public IAsyncRenderer
     {
@@ -616,6 +617,7 @@ namespace spilcd16
             if (bl != GPIO_NUM_NC)
             {
                 
+                gpio_reset_pin(bl);
                 ledc_timer_config_t ledc_timer = {
                     .speed_mode = LEDC_LOW_SPEED_MODE,           // timer mode
                     .duty_resolution = LEDC_TIMER_12_BIT, // resolution of PWM duty
