@@ -7,7 +7,7 @@ using namespace display;
 
 
 
-namespace menu
+namespace SimpleMenu
 {
     class MenuItem:public iValueManager
     {

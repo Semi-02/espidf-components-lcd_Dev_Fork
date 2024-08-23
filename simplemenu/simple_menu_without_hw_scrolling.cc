@@ -1,5 +1,5 @@
 #include "simple_menu_without_hw_scrolling.hh"
-namespace menu{
+namespace SimpleMenu{
     int32_t IntegerItem::valueTmp;
     uint32_t OptionItem::selectedOptionTmp;
     bool BoolItem::valueTmp;

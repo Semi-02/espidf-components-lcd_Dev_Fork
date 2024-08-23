@@ -13,7 +13,7 @@
 
 #include <esp_log.h>
 
-namespace menu
+namespace SimpleMenu
 {
      inline size_t modulo(const int i, const int n)
     {

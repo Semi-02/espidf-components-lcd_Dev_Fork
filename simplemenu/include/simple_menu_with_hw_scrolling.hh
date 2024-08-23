@@ -6,7 +6,7 @@
 using namespace display;
 
 
-namespace menu
+namespace SimpleMenu
 {
      
     class MenuItem:public iValueManager
@@ -35,6 +35,20 @@ namespace menu
         }
     };
 
+    
+    class LiveValueItem : public MenuItem{
+    private:
+        const char *const value;
+    public:
+        LiveValueItem(const char *const name, const char *const value) : MenuItem(name), value(value) {}
+        void RenderCompact(iFullLineWriter *lw, int line, bool invert) override
+        {
+            lw->printfl(line, invert, "%s\t\t%s", name, value);
+        }
+        OnOpenFullscreenResult OnOpenFullscreen() override { return OnOpenFullscreenResult::NOT_OK; }
+    };
+    
+    
     class ConfirmationItem : public MenuItem
     {
     private:
@@ -77,8 +91,6 @@ namespace menu
             return MenuItemResult::REDRAW;
         }
     };
-
-    
 
     class IntegerItem : public MenuItem
     {
@@ -517,7 +529,7 @@ namespace menu
     // Wird ein MenuItem selektiert, wird es dem Pfad hinzugefügt und es darf sich FullScreen zeigen
     // Normales Item wechselt es in eine Bearbeitungssicht Show. es bekommt dann alle Nutzerbefehle Up, Down, Select, Back
 
-    class MenuManagement
+    class M
     {
     private:
         FolderItem *root;
@@ -527,7 +539,7 @@ namespace menu
         uint8_t availableLines;//lines in Display ram for scrolling (ex: ST7789 with line height 24: 13, as diplay ram has 320 lines)
 
     public:
-        MenuManagement(FolderItem *root, iFullLineWriter *lw) : root(root), lw(lw), shownLines(lw->GetShownLines()), availableLines(lw->GetAvailableLines()) {}
+        M(FolderItem *root, iFullLineWriter *lw) : root(root), lw(lw), shownLines(lw->GetShownLines()), availableLines(lw->GetAvailableLines()) {}
 
         void Init()
         {

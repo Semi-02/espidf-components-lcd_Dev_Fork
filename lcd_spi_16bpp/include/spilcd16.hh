@@ -140,7 +140,7 @@ namespace spilcd16
 
 #define LCD135x240_0 135, 240, 52, 40, spilcd16::eOrientation::NORMAL
 #define LCD135x240_90 240, 135, 40, 52, spilcd16::eOrientation::EXY_MX_90
-#define LCD240x240_0 240, 240, 40, 0, spilcd16::eOrientation::NORMAL
+#define LCD240x240_0 240, 240, 0, 40, spilcd16::eOrientation::NORMAL
     
     class FilledRectRenderer : public IAsyncRenderer
     {
@@ -605,7 +605,7 @@ namespace spilcd16
             ESP_LOGI(TAG, "preCb %d, postCb1 %d, postCb2 %d", this->preCbCalls, postCb1Calls, postCb2Calls);
         }
 
-        esp_err_t InitSpiAndGpio()
+        ErrorCode InitSpiAndGpio()
         {
             if (cs != GPIO_NUM_NC)
             {
@@ -669,7 +669,7 @@ namespace spilcd16
             buscfg.flags = 0;
             buscfg.intr_flags = 0;
             ESP_ERROR_CHECK(spi_bus_initialize(spiHost, &buscfg, SPI_DMA_CH_AUTO));
-            return ESP_OK;
+            return ErrorCode::OK;
         }
 
         void Init_ST7789(Color::Color565 fillColor = Color::BLACK)

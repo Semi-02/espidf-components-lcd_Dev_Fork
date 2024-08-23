@@ -16,5 +16,5 @@ namespace button{
         RELEASED_LONG,
     };
     ButtonPressResult Button(gpio_num_t gpio);
-    ButtonPressResult ButtonLoop(menu::iMenuManagement* m, gpio_num_t gpio);
+    ButtonPressResult ButtonLoop(SimpleMenu::iMenuManagement* m, gpio_num_t gpio);
 }

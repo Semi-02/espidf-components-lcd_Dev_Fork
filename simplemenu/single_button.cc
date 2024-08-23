@@ -36,7 +36,7 @@ namespace button
         return ButtonPressResult::NO_CHANGE;
     }
 
-    ButtonPressResult ButtonLoop(menu::iMenuManagement *m, gpio_num_t gpio)
+    ButtonPressResult ButtonLoop(SimpleMenu::iMenuManagement *m, gpio_num_t gpio)
     {
         ButtonPressResult r = Button(gpio);
         switch (r)
