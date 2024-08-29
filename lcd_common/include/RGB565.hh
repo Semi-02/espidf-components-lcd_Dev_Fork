@@ -62,7 +62,7 @@ namespace Color
             return c;
         }
 
-        uint16_t toST7789_SPI_native()
+        constexpr uint16_t toST7789_SPI_native() const
         {
 
             if (std::endian::native == std::endian::big)
@@ -76,10 +76,20 @@ namespace Color
 
     constexpr Color565 BLACK{Color565(0, 0, 0)};
     constexpr Color565 WHITE{Color565(255, 255, 255)};
-    constexpr Color565 BLUE{Color565(0, 0, 255)};
-    constexpr Color565 GREEN{Color565(0, 255, 0)};
     constexpr Color565 RED{Color565(255, 0, 0)};
+    constexpr Color565 LEDC_TIMER_13_BIT{Color565(0, 255, 0)};
+    constexpr Color565 BLUE{Color565(0, 0, 255)};
     constexpr Color565 YELLOW{Color565(255, 255, 0)};
+
+    constexpr Color565 CYAN{Color565(0, 255, 255)};
+    constexpr Color565 MAGENTA{Color565(255, 0, 255)};
     constexpr Color565 SILVER{Color565(192, 192, 192)};
+    constexpr Color565 GRAY{Color565(128, 128, 128)};
+    constexpr Color565 MAROON{Color565(128, 0, 0)};
+    constexpr Color565 OLIVE{Color565(128, 128, 0)};
+    constexpr Color565 GREEN{Color565(0, 128, 0)};
+    constexpr Color565 PURPLE{Color565(128, 0, 128)};
+    constexpr Color565 TEAL{Color565(0, 128, 128)};
+    constexpr Color565 NAVY{Color565(0, 0, 128)};
 }
 #undef TAG

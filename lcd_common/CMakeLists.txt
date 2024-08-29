@@ -1,3 +1,3 @@
-idf_component_register(SRCS "arial_and_symbols_24px1bpp.cc" "unicode_utils.cc"
+idf_component_register(SRCS "qrcode.c" "unicode_utils.cc" "qrcode.c"
                     INCLUDE_DIRS "include"
                     REQUIRES "errorcodes")

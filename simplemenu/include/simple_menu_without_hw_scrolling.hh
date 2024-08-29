@@ -1,8 +1,8 @@
 #pragma once
+#include <simple_menu_common.hh>
 #include <esp_log.h>
 #define TAG "MENU"
 
-#include <simple_menu_common.hh>
 using namespace display;
 
 

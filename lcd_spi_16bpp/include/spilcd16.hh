@@ -12,7 +12,7 @@
 #include <driver/ledc.h>
 #include <esp_heap_caps.h>
 #include <algorithm>
-#include "./lcd_interfaces.hh"
+#include "lcd_interfaces.hh"
 #include "RGB565.hh"
 #include "errorcodes.hh"
 #include "common-esp32.hh"
@@ -140,7 +140,7 @@ namespace spilcd16
 
 #define LCD135x240_0 135, 240, 52, 40, spilcd16::eOrientation::NORMAL
 #define LCD135x240_90 240, 135, 40, 52, spilcd16::eOrientation::EXY_MX_90
-#define LCD240x240_0 240, 240, 0, 40, spilcd16::eOrientation::NORMAL
+#define LCD240x240_0 240, 240, 0, 0, spilcd16::eOrientation::NORMAL
     
     class FilledRectRenderer : public IAsyncRenderer
     {
@@ -177,166 +177,7 @@ namespace spilcd16
             }
         }
     };
-/*
-    class TextRenderer : public IAsyncRenderer
-    {
-    private:
-        const lv_font_t *font;
-        Point2D pos;
-        uint16_t colors[16];
-        char *text;
-        char *c;
-        uint32_t currentGlyphIndex{0};
-        uint32_t nextGlyphIndex{0};
-        
 
-    public:
-        TextRenderer(const lv_font_t *font, Point2D start, Color::Color565 foreground, Color::Color565 background, char *text_will_be_freeed_inside) : font(font), pos(start), text(text_will_be_freeed_inside), c(text_will_be_freeed_inside) {
-            for(int i=0;i<16;i++){
-                colors[i]=background.overlayWith(foreground, opa4_table[i]).toST7789_SPI_native();
-            }
-            if (!c) {
-                return;
-            }
-            if(!(*c)){
-                free(text);
-                return;
-            }
-            nextGlyphIndex= GetGlyphIndex(unicode_utils::getCodepointAndAdvancePointer(&c)); 
-        }
-
-        bool GetNextOverallLimits(size_t bufferSize, Point2D &start, Point2D &end_excl) override
-        {
-            if(!nextGlyphIndex){
-                free(text);
-                c=nullptr;
-                return false;
-            }
-            currentGlyphIndex=nextGlyphIndex;
-            nextGlyphIndex= GetGlyphIndex(unicode_utils::getCodepointAndAdvancePointer(&c));
-            int32_t kv = GetKerningValue(currentGlyphIndex, nextGlyphIndex); 
-            
-            const lv_font_fmt_txt_glyph_dsc_t * glyph_dsc= GetGlyphDesc(currentGlyphIndex);
-            start.x = pos.x + glyph_dsc->ofs_x;
-            end_excl.x = start.x + glyph_dsc->box_w;
-            end_excl.y = pos.y + glyph_dsc->ofs_y;
-            start.y = end_excl.y - glyph_dsc->box_h;
-
-            pos.x += ((glyph_dsc->adv_w+kv) + (1 << 3)) >> 4;
-            ESP_LOGI(TAG, "Write GlyphIndex %ld from (%d/%d) to (%d/%d), kv=%li, next x=%d",currentGlyphIndex, start.x, start.y, end_excl.x, end_excl.y, kv, pos.x);
-     
-            return true;
-        }
-
-        const lv_font_fmt_txt_glyph_dsc_t * GetGlyphDesc(uint32_t glyphIndex)
-        {
-            return font->dsc->glyph_dsc + glyphIndex;
-        }
-
-        uint32_t GetGlyphIndex(uint32_t codepoint)
-        {
-            if(!codepoint) return 0; //fail fast
-            for (int mapIndex = 0; mapIndex < font->dsc->cmap_num; mapIndex++)
-            {
-                lv_font_fmt_txt_cmap_t map = font->dsc->cmaps[mapIndex];
-                if ((codepoint < map.range_start) || (map.range_start + map.range_length <= codepoint))
-                {
-                    continue;
-                }
-                switch (map.type)
-                {
-                case LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY:
-                    return map.glyph_id_start + codepoint - map.range_start;
-                case LV_FONT_FMT_TXT_CMAP_SPARSE_TINY:
-                    for (int offset = 0; offset < map.list_length; offset++)
-                    {
-                        if (map.unicode_list[offset] == codepoint)
-                        {
-                            return map.glyph_id_start + offset;
-                        }
-                    }
-                    break;
-                default:
-                    break;
-                }
-                break;
-            }
-            return 0;
-        }
-
-        int32_t GetKerningValue(uint32_t gid_left, uint32_t gid_right)
-        {
-            assert(gid_left);
-            if(!gid_right) return 0;
-            const lv_font_fmt_txt_dsc_t *fdsc = font->dsc;
-
-            int8_t value = 0;
-
-            if (fdsc->kern_classes == 0)
-            {
-                ESP_LOGW(TAG, "fdsc->kern_classes == 0 not supported");
-             
-            }
-            else if (fdsc->kern_classes == 1 && fdsc->kern_dsc)
-            {
-                //Kern classes
-                const lv_font_fmt_txt_kern_classes_t *kdsc = static_cast<const lv_font_fmt_txt_kern_classes_t *>(fdsc->kern_dsc);
-                
-                uint8_t left_class = kdsc->left_class_mapping[gid_left];
-                uint8_t right_class = kdsc->right_class_mapping[gid_right];
-
-                //If class = 0, kerning not exist for that glyph else got the value form `class_pair_values` 2D array
-                if (left_class > 0 && right_class > 0)
-                {
-                    value = kdsc->class_pair_values[(left_class - 1) * kdsc->right_class_cnt + (right_class - 1)];
-                }
-            }
-            return  (value * font->dsc->kern_scale) >> 4;//kernscale==16, dann wieder durch 16 teilen, also keine Änderung
-        }
-
-        void Render(uint16_t startLine, uint16_t numberOfLines, uint16_t *buffer) override
-        {
-            const lv_font_fmt_txt_glyph_dsc_t * glyph_dsc= GetGlyphDesc(currentGlyphIndex);
-            if (glyph_dsc->box_h != numberOfLines)
-            {
-                ESP_LOGE(TAG, "Expected len=%u, buffer len=%u", glyph_dsc->box_h, numberOfLines);
-            }
-            const uint8_t *bitmap = font->dsc->glyph_bitmap;
-            uint32_t bo = glyph_dsc->bitmap_index;
-            uint8_t bits = 0, bit = 0;
-            size_t i = 0;
-            if (font->dsc->bpp == 4)
-            {
-                // immer zwei pixel in einem rutsch
-                while (i < glyph_dsc->box_w*numberOfLines)
-                {
-                    bits = bitmap[bo++];
-                    buffer[i++] = colors[(bits & 0xF0) >> 4];
-                    if (i < glyph_dsc->box_w*numberOfLines)
-                    {
-                        buffer[i++] = colors[bits & 0x0F];
-                    }
-                }
-            }
-            else if (font->dsc->bpp == 1)
-            {
-                for (size_t yy = 0; yy < glyph_dsc->box_h; yy++)
-                {
-                    for (size_t xx = 0; xx < glyph_dsc->box_w; xx++)
-                    {
-                        if (!(bit++ & 7))
-                        {
-                            bits = bitmap[bo++];
-                        }
-                        buffer[i] = bits & 0x80 ? colors[15] : colors[0];
-                        i++;
-                        bits <<= 1;
-                    }
-                }
-            }
-        }
-    };
-    */
     
     class TransactionInfo;
 
@@ -368,7 +209,7 @@ namespace spilcd16
     };
 
     template <spi_host_device_t spiHost, gpio_num_t mosi, gpio_num_t sclk, gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, uint16_t WIDTH, uint16_t HEIGHT, int16_t OFFSET_X, int16_t OFFSET_Y, eOrientation ORIENTATION, size_t PIXEL_BUFFER_SIZE_IN_PIXELS, uint32_t  BACKLIGHT_ON_PWM=4096, uint32_t  BACKLIGHT_OFF_PWM=0>
-    class M : public ITransactionCallback, public IRendererHost, public iBacklight
+    class M : public ITransactionCallback, public IRendererHost, public iBacklight, public iRectFiller
     {
     private:
         spi_device_handle_t spi;
@@ -458,6 +299,10 @@ namespace spilcd16
         }
 
     public:
+
+        void ResetTransactionInfo(){
+
+        }
         M()
         {
             for (int i = 0; i < 2; i++)
@@ -647,16 +492,7 @@ namespace spilcd16
             gpio_set_direction(dc, GPIO_MODE_OUTPUT);
             gpio_set_level(dc, 0);
 
-            // Reset the display
-            if (rst != GPIO_NUM_NC)
-            {
-                gpio_reset_pin(rst);
-                gpio_set_direction(rst, GPIO_MODE_OUTPUT);
-                gpio_set_level(rst, 0);
-                delayMs(100);
-                gpio_set_level(rst, 1);
-                delayMs(100);
-            }
+            
 
             spi_bus_config_t buscfg = {};
             memset(&buscfg, 0, sizeof(buscfg));
@@ -669,6 +505,14 @@ namespace spilcd16
             buscfg.flags = 0;
             buscfg.intr_flags = 0;
             ESP_ERROR_CHECK(spi_bus_initialize(spiHost, &buscfg, SPI_DMA_CH_AUTO));
+
+            // Reset the display and keep
+            if (rst != GPIO_NUM_NC)
+            {
+                gpio_reset_pin(rst);
+                gpio_set_direction(rst, GPIO_MODE_OUTPUT);
+                gpio_set_level(rst, 0);
+            }
             return ErrorCode::OK;
         }
 
@@ -683,6 +527,13 @@ namespace spilcd16
             devcfg.pre_cb = M::lcd_spi_pre_transfer_callback;
             ESP_ERROR_CHECK(spi_bus_add_device(spiHost, &devcfg, &spi));
             assert(spi);
+            //and release reset after the setup
+            if (rst != GPIO_NUM_NC)
+            {
+                delayMs(100);
+                gpio_set_level(rst, 1);
+                delayMs(100);
+            }
 
             lcd_cmd(CMD::Software_Reset);
             // If software reset is sent during sleep in mode, it will be necessary to wait 120msec before sending sleep out command.
@@ -711,13 +562,13 @@ namespace spilcd16
             Draw(&frr, false);
         }
 
-        ErrorCode FillRectSyncPolling(Point2D start, Point2D end_ex, Color::Color565 col, bool considerOffsetsOfVisibleArea = true)
+        ErrorCode FillRectSyncPolling(Point2D start, Point2D end_ex, Color::Color565 col, bool considerOffsetsOfVisibleArea = true) override
         {
 
             if (start.x >= end_ex.x || start.y >= end_ex.y)
                 return ErrorCode::GENERIC_ERROR;
             size_t pixels = (end_ex.x - start.x) * (end_ex.y - start.y);
-            ESP_LOGI(TAG, "Called FillRect for %d/%d - %d/%d, aka %d pixels of %d", start.x, start.y, end_ex.x, end_ex.y, pixels, PIXEL_BUFFER_SIZE_IN_PIXELS);
+            //ESP_LOGI(TAG, "Called FillRect for %d/%d - %d/%d, aka %d pixels of %d", start.x, start.y, end_ex.x, end_ex.y, pixels, PIXEL_BUFFER_SIZE_IN_PIXELS);
             int16_t startX = start.x + (considerOffsetsOfVisibleArea ? OFFSET_X : 0);
             int16_t endX = end_ex.x - 1 + (considerOffsetsOfVisibleArea ? OFFSET_X : 0);
             int16_t startY = start.y + (considerOffsetsOfVisibleArea ? OFFSET_Y : 0);
@@ -781,7 +632,7 @@ namespace spilcd16
                 ESP_ERROR_CHECK(spi_device_polling_transmit(spi, &trans));
                 pixels -= pixelsNow;
             }
-            ESP_LOGI(TAG, "FillRect finished");
+            ESP_LOGD(TAG, "FillRect finished");
             return ErrorCode::OK;
         }
 
@@ -847,7 +698,7 @@ namespace spilcd16
             return ErrorCode::OK;
         }
 */
-        ErrorCode Draw(IAsyncRenderer *renderer, bool considerOffsetsOfVisibleArea = true)
+        ErrorCode Draw(IAsyncRenderer *renderer, bool considerOffsetsOfVisibleArea = true, bool polling=true)
         {
             Point2D start;
             Point2D end_ex;
@@ -857,7 +708,7 @@ namespace spilcd16
                 uint16_t lineLengthPixel = end_ex.x-start.x;
                 uint16_t linesMaxPerCall=(uint16_t)(PIXEL_BUFFER_SIZE_IN_PIXELS/lineLengthPixel);
                 ESP_LOGD(TAG, "Called Draw for %d/%d - %d/%d i.e. %u lines of length %d. As buffer size is %upx, max %d lines per call are possible", start.x, start.y, end_ex.x, end_ex.y, linesTotal, lineLengthPixel, PIXEL_BUFFER_SIZE_IN_PIXELS, linesMaxPerCall);
-                updateAndEnqueuePrepareTransactions(start, end_ex, considerOffsetsOfVisibleArea, true);
+                updateAndEnqueuePrepareTransactions(start, end_ex, considerOffsetsOfVisibleArea, polling);
                 ESP_LOGD(TAG, "Five basic transaction in Draw have been completed");
                 uint16_t startLine{0};
                 uint8_t bufferIndex=0;
@@ -865,7 +716,7 @@ namespace spilcd16
                 {
                     uint16_t linesInNextCall = std::min((uint16_t)(linesTotal - startLine), linesMaxPerCall);
                     renderer->Render(startLine, linesInNextCall, buffer[bufferIndex]);
-                    updateAndEnqueueBufferTransaction(bufferIndex, renderer, startLine, lineLengthPixel, linesTotal, linesInNextCall, true);
+                    updateAndEnqueueBufferTransaction(bufferIndex, renderer, startLine, lineLengthPixel, linesTotal, linesInNextCall, polling);
                     ESP_LOGD(TAG, "Buffer%d transaction in Draw has been completed with %u lines.",bufferIndex, linesInNextCall);
                     startLine += linesInNextCall;
                     bufferIndex++;
@@ -932,9 +783,10 @@ namespace spilcd16
 
         static void lcd_spi_pre_transfer_callback(spi_transaction_t *t)
         {
-            if (t->user == nullptr)
+            if (!t->user)
                 return;
             spilcd16::TransactionInfo *ti = (spilcd16::TransactionInfo *)t->user;
+            ESP_LOGD(TAG, "Manager @0x%08X", (unsigned int)ti);
             ti->manager->preCb(t, ti);
         }
     };

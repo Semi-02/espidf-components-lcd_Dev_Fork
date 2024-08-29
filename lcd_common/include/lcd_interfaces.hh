@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <errorcodes.hh>
 #include <common.hh>
+#include "RGB565.hh"
 namespace display
 {
     class iFullLineWriter
@@ -51,6 +52,7 @@ namespace display
          * Aufrufer muss sich dann darum kümmern, dass dieser Bereich auf durch eine entsprechende Anzahl an Render-Aufrufen auch wirklich beschrieben wird
          * Funktion returniert false, wenn es keine vollzuschreibenden Bereiche mehr gibt
          * bufferSizePixels ist lediglich informativ, damit der asyncRenderer sich bei Bedarf darauf optimieren kann
+         * returns: true, wenn ein gültiger Bereich zurück gegeben wurde, fals, wenn nichts mehr zu rendern ist
          */
         virtual bool GetNextOverallLimits(size_t bufferSizePixels, Point2D &start, Point2D &end_excl) = 0;
         // Die Render-Funktion fragt immer ganze Zeilen ab. Diese sorgt dafür, dass er Buffer ggf nicht vollständig genutzt werden könnte,
@@ -61,9 +63,14 @@ namespace display
 
     class IRendererHost{
         public:
-        virtual ErrorCode Draw(IAsyncRenderer *renderer, bool considerOffsetsOfVisibleArea = true)=0;
+        virtual ErrorCode Draw(IAsyncRenderer *renderer, bool considerOffsetsOfVisibleArea = true, bool polling=true)=0;
         virtual ErrorCode prepareVerticalStrolling(uint16_t fixedTop, uint16_t fixedBottom)=0;
         virtual ErrorCode doVerticalStrolling(uint16_t lineOnTop_0_to_HEIGHT_OF_SCROLL_AREA)=0;
+    };
+
+    class iRectFiller{
+        public:
+        virtual ErrorCode FillRectSyncPolling(Point2D start, Point2D end_ex, Color::Color565 col, bool considerOffsetsOfVisibleArea = true)=0;
     };
 
     class iBacklight{

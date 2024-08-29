@@ -1,0 +1,160 @@
+/*
+    class TextRenderer : public IAsyncRenderer
+    {
+    private:
+        const lv_font_t *font;
+        Point2D pos;
+        uint16_t colors[16];
+        char *text;
+        char *c;
+        uint32_t currentGlyphIndex{0};
+        uint32_t nextGlyphIndex{0};
+        
+
+    public:
+        TextRenderer(const lv_font_t *font, Point2D start, Color::Color565 foreground, Color::Color565 background, char *text_will_be_freeed_inside) : font(font), pos(start), text(text_will_be_freeed_inside), c(text_will_be_freeed_inside) {
+            for(int i=0;i<16;i++){
+                colors[i]=background.overlayWith(foreground, opa4_table[i]).toST7789_SPI_native();
+            }
+            if (!c) {
+                return;
+            }
+            if(!(*c)){
+                free(text);
+                return;
+            }
+            nextGlyphIndex= GetGlyphIndex(unicode_utils::getCodepointAndAdvancePointer(&c)); 
+        }
+
+        bool GetNextOverallLimits(size_t bufferSize, Point2D &start, Point2D &end_excl) override
+        {
+            if(!nextGlyphIndex){
+                free(text);
+                c=nullptr;
+                return false;
+            }
+            currentGlyphIndex=nextGlyphIndex;
+            nextGlyphIndex= GetGlyphIndex(unicode_utils::getCodepointAndAdvancePointer(&c));
+            int32_t kv = GetKerningValue(currentGlyphIndex, nextGlyphIndex); 
+            
+            const lv_font_fmt_txt_glyph_dsc_t * glyph_dsc= GetGlyphDesc(currentGlyphIndex);
+            start.x = pos.x + glyph_dsc->ofs_x;
+            end_excl.x = start.x + glyph_dsc->box_w;
+            end_excl.y = pos.y + glyph_dsc->ofs_y;
+            start.y = end_excl.y - glyph_dsc->box_h;
+
+            pos.x += ((glyph_dsc->adv_w+kv) + (1 << 3)) >> 4;
+            ESP_LOGI(TAG, "Write GlyphIndex %ld from (%d/%d) to (%d/%d), kv=%li, next x=%d",currentGlyphIndex, start.x, start.y, end_excl.x, end_excl.y, kv, pos.x);
+     
+            return true;
+        }
+
+        const lv_font_fmt_txt_glyph_dsc_t * GetGlyphDesc(uint32_t glyphIndex)
+        {
+            return font->dsc->glyph_dsc + glyphIndex;
+        }
+
+        uint32_t GetGlyphIndex(uint32_t codepoint)
+        {
+            if(!codepoint) return 0; //fail fast
+            for (int mapIndex = 0; mapIndex < font->dsc->cmap_num; mapIndex++)
+            {
+                lv_font_fmt_txt_cmap_t map = font->dsc->cmaps[mapIndex];
+                if ((codepoint < map.range_start) || (map.range_start + map.range_length <= codepoint))
+                {
+                    continue;
+                }
+                switch (map.type)
+                {
+                case LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY:
+                    return map.glyph_id_start + codepoint - map.range_start;
+                case LV_FONT_FMT_TXT_CMAP_SPARSE_TINY:
+                    for (int offset = 0; offset < map.list_length; offset++)
+                    {
+                        if (map.unicode_list[offset] == codepoint)
+                        {
+                            return map.glyph_id_start + offset;
+                        }
+                    }
+                    break;
+                default:
+                    break;
+                }
+                break;
+            }
+            return 0;
+        }
+
+        int32_t GetKerningValue(uint32_t gid_left, uint32_t gid_right)
+        {
+            assert(gid_left);
+            if(!gid_right) return 0;
+            const lv_font_fmt_txt_dsc_t *fdsc = font->dsc;
+
+            int8_t value = 0;
+
+            if (fdsc->kern_classes == 0)
+            {
+                ESP_LOGW(TAG, "fdsc->kern_classes == 0 not supported");
+             
+            }
+            else if (fdsc->kern_classes == 1 && fdsc->kern_dsc)
+            {
+                //Kern classes
+                const lv_font_fmt_txt_kern_classes_t *kdsc = static_cast<const lv_font_fmt_txt_kern_classes_t *>(fdsc->kern_dsc);
+                
+                uint8_t left_class = kdsc->left_class_mapping[gid_left];
+                uint8_t right_class = kdsc->right_class_mapping[gid_right];
+
+                //If class = 0, kerning not exist for that glyph else got the value form `class_pair_values` 2D array
+                if (left_class > 0 && right_class > 0)
+                {
+                    value = kdsc->class_pair_values[(left_class - 1) * kdsc->right_class_cnt + (right_class - 1)];
+                }
+            }
+            return  (value * font->dsc->kern_scale) >> 4;//kernscale==16, dann wieder durch 16 teilen, also keine Änderung
+        }
+
+        void Render(uint16_t startLine, uint16_t numberOfLines, uint16_t *buffer) override
+        {
+            const lv_font_fmt_txt_glyph_dsc_t * glyph_dsc= GetGlyphDesc(currentGlyphIndex);
+            if (glyph_dsc->box_h != numberOfLines)
+            {
+                ESP_LOGE(TAG, "Expected len=%u, buffer len=%u", glyph_dsc->box_h, numberOfLines);
+            }
+            const uint8_t *bitmap = font->dsc->glyph_bitmap;
+            uint32_t bo = glyph_dsc->bitmap_index;
+            uint8_t bits = 0, bit = 0;
+            size_t i = 0;
+            if (font->dsc->bpp == 4)
+            {
+                // immer zwei pixel in einem rutsch
+                while (i < glyph_dsc->box_w*numberOfLines)
+                {
+                    bits = bitmap[bo++];
+                    buffer[i++] = colors[(bits & 0xF0) >> 4];
+                    if (i < glyph_dsc->box_w*numberOfLines)
+                    {
+                        buffer[i++] = colors[bits & 0x0F];
+                    }
+                }
+            }
+            else if (font->dsc->bpp == 1)
+            {
+                for (size_t yy = 0; yy < glyph_dsc->box_h; yy++)
+                {
+                    for (size_t xx = 0; xx < glyph_dsc->box_w; xx++)
+                    {
+                        if (!(bit++ & 7))
+                        {
+                            bits = bitmap[bo++];
+                        }
+                        buffer[i] = bits & 0x80 ? colors[15] : colors[0];
+                        i++;
+                        bits <<= 1;
+                    }
+                }
+            }
+        }
+    };
+    */

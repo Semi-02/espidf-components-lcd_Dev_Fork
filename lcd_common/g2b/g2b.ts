@@ -13,8 +13,9 @@ import { SvgDirectoryGlyphProvider } from "./SvgDirectoryGlyphProvider";
 import { UNICODE_PRIVATE_USE_AREA, Range } from "./utils";
 import fs from "node:fs"
 import { TtfGlyphProvider } from "./TtfGlyphProvider";
+import { AdafruitFontGlyphProvider } from "./AdafruitFontGlyphProvider";
 
-
+/*
 var arial = new TtfGlyphProvider(opentype.parse(fs.readFileSync("./g2b/ttf_fonts/Arial.ttf").buffer), [new Range(32,256)], 32, 24, 10, false)
 //var glcd = new GlcdFontProvider("./glcd_fonts/font_30_glcd.ts");
 var svg = new SvgDirectoryGlyphProvider("./node_modules/pixelarticons/svg", UNICODE_PRIVATE_USE_AREA, 32, 32, false);
@@ -23,3 +24,11 @@ FontCC.Build(null, arial, svg ).then(fontCc=>{
 	fs.writeFileSync(target+".cc", fontCc.toFontCCFile(target));
 	fs.writeFileSync("symbols.hh", fontCc.toSymbolDefHeader());
 })
+*/
+const UNITS_PER_PIXEL=128 //keep in sync with lcd_font.hh
+var sans12 = new AdafruitFontGlyphProvider("./adafruit_fonts/FreeSans12pt7b.ts", UNITS_PER_PIXEL);
+FontCC.Build(null, sans12).then(fontCc=>{
+	var target="sans12pt1bpp"
+	fs.writeFileSync("./include/fonts/"+target+".hh", fontCc.toFontCCFile(target));
+	fs.writeFileSync("symbols.hh", fontCc.toSymbolDefHeader());
+});

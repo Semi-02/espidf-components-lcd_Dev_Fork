@@ -13,8 +13,11 @@ namespace lcd_common
         UNDEFINED,
         ONE_BPP_EIGHT_IN_A_COLUMN,//best for SSD1306 etc
         FOUR_BPP_ROW_BY_ROW,//best for ST7789 etc
+        ONE_BPP_ROW_BY_ROW, //best for ST7789 etc
     };
-    
+    //Festlegung Koordinatensystem: y nach unten
+    //Positive Offsets gehen nach unten 
+    //Bei Glyphs beziehen sich die Offsets auf die Baseline, haben also in der Regel negative Werte. Beim _ kommt es aber ausnahmsweise zu einem Positiven Wert
     class GlyphDesc
     {
     public:
@@ -22,12 +25,12 @@ namespace lcd_common
         const uint16_t adv_w;
         const uint8_t box_w;
         const uint8_t box_h;
-        const uint8_t ofs_x;
-        const uint8_t ofs_y;
+        const int8_t ofs_x;
+        const int8_t ofs_y;
         const uint16_t kerningClassLeft;
         const uint16_t kerningClassRight;
         const BitmapFormat bitmapFormat;
-        constexpr GlyphDesc(uint32_t bitmap_index, uint16_t adv_w, uint8_t box_w, uint8_t box_h, uint8_t ofs_x, uint8_t ofs_y, uint16_t kerningClassLeft, uint16_t kerningClassRight, BitmapFormat bitmapFormat) :
+        constexpr GlyphDesc(uint32_t bitmap_index, uint16_t adv_w, uint8_t box_w, uint8_t box_h, int8_t ofs_x, int8_t ofs_y, uint16_t kerningClassLeft, uint16_t kerningClassRight, BitmapFormat bitmapFormat) :
             bitmap_index(bitmap_index),
             adv_w(adv_w),
             box_w(box_w),
@@ -213,7 +216,7 @@ class GlyphHelper
             
             if(glyphBeforeTabulator[0]!=UINT32_MAX && glyphBeforeTabulator[0]!=glyphBeforeTabulator[1]){
                 GlyphHelper* g1 =&glyphs.at(glyphBeforeTabulator[0]+1);//""
-                GlyphHelper* g2 =&glyphs.at(glyphBeforeTabulator[1]);
+                GlyphHelper* g2 =&glyphs.at(glyphBeforeTabulator[1]);//TODO: Hier Fehler!, wenn text=x\tLabAtHomeV15
                 
                 uint16_t startOfBlock=g1->startX;
                 uint16_t endOfBlock =g2->startX+g2->glyph_dsc->box_w;
@@ -231,15 +234,17 @@ class GlyphHelper
             }
         }
         
-        size_t WriteGlyphLineToBuffer16bpp(const FontDesc* font, uint16_t line, uint16_t *buffer_at_correct_position, uint16_t *colors, uint16_t suppressedPixelIfBackground = 0){
+        size_t WriteGlyphLineToBuffer16bpp(const FontDesc* font, int16_t lineRelativeToBaseline, uint16_t *buffer_at_correct_position, uint16_t *colors, uint16_t suppressedPixelIfBackground = 0){
             switch (glyph_dsc->bitmapFormat)
             {
             case BitmapFormat::ONE_BPP_EIGHT_IN_A_COLUMN:
-                return WriteGlyphLine1bppToBuffer16bpp(font, line, buffer_at_correct_position, colors, suppressedPixelIfBackground);
+                return Write1bppEightInAColumnToBuffer16bpp(font, lineRelativeToBaseline, buffer_at_correct_position, colors, suppressedPixelIfBackground);
             case BitmapFormat::FOUR_BPP_ROW_BY_ROW:
-                return WriteGlyphLine4bppToBuffer16bpp(font, line, buffer_at_correct_position, colors, suppressedPixelIfBackground);
+                return WriteGlyphLine4bppToBuffer16bpp(font, lineRelativeToBaseline, buffer_at_correct_position, colors, suppressedPixelIfBackground);
+            case BitmapFormat::ONE_BPP_ROW_BY_ROW:
+                return Write1bppRowByRowToBuffer16bpp(font, lineRelativeToBaseline, buffer_at_correct_position, colors, suppressedPixelIfBackground);
             default:
-                ESP_LOGE(TAG, "BitmapFormat::FOUR_BPP_ROW_BY_ROW or other not yet supported for 1bpp displays");
+                ESP_LOGE(TAG, "BitmapFormat not yet supported for 16bpp displays");
                 return 0;
             }
             
@@ -256,7 +261,7 @@ class GlyphHelper
             }
         }
 
-        size_t WriteGlyphLine1bppToBuffer16bpp(const FontDesc* font, uint16_t line, uint16_t *buffer_at_correct_position, uint16_t *colors, uint16_t suppressedPixelIfBackground = 0)
+        size_t Write1bppEightInAColumnToBuffer16bpp(const FontDesc* font, int16_t line, uint16_t *buffer_at_correct_position, uint16_t *colors, uint16_t suppressedPixelIfBackground = 0)
         {
             int16_t lineInBitmap = line - this->glyph_dsc->ofs_y;
             if(lineInBitmap<0 || lineInBitmap>=this->glyph_dsc->box_h){
@@ -291,7 +296,40 @@ class GlyphHelper
             return glyph_dsc->box_w;
         }
 
-        size_t WriteGlyphLine4bppToBuffer16bpp(const FontDesc* font, uint16_t line, uint16_t *buffer_at_correct_position, uint16_t *colors, uint16_t suppressedPixelIfBackground = 0)
+        size_t Write1bppRowByRowToBuffer16bpp(const FontDesc* font, int16_t lineRelativeToBaseline, uint16_t *buffer_at_correct_position, uint16_t *colors, uint16_t suppressedPixelIfBackground = 0)
+        {
+            int16_t lineIndexInBitmap = lineRelativeToBaseline - this->glyph_dsc->ofs_y;
+            
+            if(lineIndexInBitmap<0 || lineIndexInBitmap>=this->glyph_dsc->box_h){
+                ESP_LOGD(TAG, "this->glyph_dsc->ofs_y=%d, lineRelativeToBaseline=%d We are out of bitmap and just write %i background pixels", this->glyph_dsc->ofs_y, lineRelativeToBaseline, glyph_dsc->box_w);
+                for (int x = suppressedPixelIfBackground; x < glyph_dsc->box_w; x++) // x läuft die Breite der Bitmap entlang
+                {
+                    // ausgabe nur dann, wenn wir sowieso außerhalb der suppressed sind oder die Farbe Nicht-Hintergrund ist
+                    buffer_at_correct_position[x] = colors[0];
+                }
+                return glyph_dsc->box_w;
+            }
+            const uint8_t *bitmap = font->glyph_bitmap->begin();
+            uint32_t bo = this->glyph_dsc->bitmap_index;//base offset for this glyp
+            uint32_t bitIndex=lineIndexInBitmap*glyph_dsc->box_w;
+            //char bitsasstring[32];
+            for (int x = 0; x < glyph_dsc->box_w; x++) // x läuft die Breite der Bitmap entlang
+            {
+                uint8_t bits = bitmap[bo + (bitIndex>>3)];
+                uint8_t bit = bits & (0b10000000 >> (bitIndex & 0b111));
+                //bitsasstring[x]=bit>0?'X':' ';
+                if (x >= suppressedPixelIfBackground || bit)
+                { // ausgabe nur dann, wenn wir sowieso außerhalb der suppressed sind oder die Farbe Nicht-Hintergrund ist
+                    buffer_at_correct_position[x] = bit ? colors[15] : colors[0];
+                }
+                bitIndex++;
+            }
+            //ESP_LOGD(TAG, "Glyph@%i lineRelativeToBaseline=%d: %s", this->startX, lineRelativeToBaseline, bitsasstring);
+            
+            return glyph_dsc->box_w;
+        }
+      
+        size_t WriteGlyphLine4bppToBuffer16bpp(const FontDesc* font, int16_t line, uint16_t *buffer_at_correct_position, uint16_t *colors, uint16_t suppressedPixelIfBackground = 0)
         {
 
             const uint8_t *bitmap = font->glyph_bitmap->begin();
@@ -336,18 +374,5 @@ class GlyphHelper
             return glyph_dsc->box_w;
         }
     };
-
-    
-
-}
-
-namespace arial_and_symbols_16px1bpp
-{
-    extern const lcd_common::FontDesc font;
-}
-
-namespace arial_and_symbols_24px1bpp
-{
-    extern const lcd_common::FontDesc font;
 }
 #undef TAG

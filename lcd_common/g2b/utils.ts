@@ -22,6 +22,7 @@ export enum BitmapFormat{
     UNDEFINED,
     ONE_BPP_EIGHT_IN_A_COLUMN,//best for SSD1306 etc
     FOUR_BPP_ROW_BY_ROW,//best for ST7789 etc
+    ONE_BPP_ROW_BY_ROW,
 }
 
 export class GlyphDesc {

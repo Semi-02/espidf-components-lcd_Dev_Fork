@@ -13,7 +13,8 @@
 using namespace display;
 namespace spilcd16
 {
-    template <uint8_t LINE_HEIGHT_PIXELS, uint8_t LINE_WIDTH_PIXELS, uint8_t PADDING_LEFT, uint8_t PADDING_RIGHT>
+    //BASELINE: Position der "Baseline" der Buchstaben relativ zur ersten Zeile des Rechtecks
+    template <uint8_t LINE_HEIGHT_PIXELS, uint8_t LINE_WIDTH_PIXELS, uint8_t PADDING_LEFT, uint8_t PADDING_RIGHT, uint8_t BASELINE>
     class FullTextlineRenderer : public IAsyncRenderer
     {
     private:
@@ -98,7 +99,6 @@ namespace spilcd16
 
         void Render(uint16_t startline, uint16_t cnt, uint16_t *buffer) override{
 
-            const uint8_t MOVE_GLYPHS_DOWN{2};
             // es ist sicher gestellt, dass wir am Anfang der linie beginnen
             for (uint16_t l = 0; l < cnt; l++)
             {
@@ -122,7 +122,7 @@ namespace spilcd16
                         // wenn wir durch das "An den Anfang gehen" in den vorherigen glyph reingehen, dann schreibe nur Pixel, die im neuen Glyph nicht Hintergrund sind
                         uint16_t suppressedPixels = pos_in_pixelline - g->startX;
                         pos_in_pixelline=g->startX;
-                        pos_in_pixelline+= g->WriteGlyphLineToBuffer16bpp(font, startline+l-MOVE_GLYPHS_DOWN, &buffer_start_of_pixelline[pos_in_pixelline], colors, suppressedPixels);
+                        pos_in_pixelline+= g->WriteGlyphLineToBuffer16bpp(font, startline+l-BASELINE, &buffer_start_of_pixelline[pos_in_pixelline], colors, suppressedPixels);
                         ESP_LOGD(TAG, "Line %d+%d: glyph[%u]: Suppress %upx and write Bitmap. pos_in_pixelline=%upx", startline, l, ghIndex, suppressedPixels, pos_in_pixelline);
                     }
                     else{
@@ -130,7 +130,7 @@ namespace spilcd16
                         uint16_t p_temp0=pos_in_pixelline;
                         pos_in_pixelline = WriteBackgroundTillStartOfGlyphBitmapOrEndOfLine(ghIndex, buffer_start_of_pixelline, pos_in_pixelline);
                         uint16_t p_temp1=pos_in_pixelline;
-                        pos_in_pixelline+= g->WriteGlyphLineToBuffer16bpp(font, startline+l-MOVE_GLYPHS_DOWN, &buffer_start_of_pixelline[pos_in_pixelline], colors, 0);
+                        pos_in_pixelline+= g->WriteGlyphLineToBuffer16bpp(font, startline+l-BASELINE, &buffer_start_of_pixelline[pos_in_pixelline], colors, 0);
                         if(p_temp0!=p_temp1){
                             ESP_LOGD(TAG, "Line %d+%d: Write filler pixels till pos_in_pixelline=%upx and bitmap till pos_in_pixelline=%upx", startline, l, p_temp1, pos_in_pixelline);
                         }else{
