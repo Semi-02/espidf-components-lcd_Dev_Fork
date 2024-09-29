@@ -208,7 +208,7 @@ namespace spilcd16
         }
     };
 
-    template <spi_host_device_t spiHost, gpio_num_t mosi, gpio_num_t sclk, gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, uint16_t WIDTH, uint16_t HEIGHT, int16_t OFFSET_X, int16_t OFFSET_Y, eOrientation ORIENTATION, size_t PIXEL_BUFFER_SIZE_IN_PIXELS, uint32_t  BACKLIGHT_ON_PWM=4096, uint32_t  BACKLIGHT_OFF_PWM=0>
+    template <spi_host_device_t spiHost, gpio_num_t mosi, gpio_num_t sclk, gpio_num_t cs, gpio_num_t dc, gpio_num_t rst, gpio_num_t bl, uint16_t WIDTH, uint16_t HEIGHT, int16_t OFFSET_X, int16_t OFFSET_Y, eOrientation ORIENTATION, size_t PIXEL_BUFFER_SIZE_IN_PIXELS, uint32_t  BACKLIGHT_ON_PWM=4095, uint32_t  BACKLIGHT_OFF_PWM=0>
     class M : public ITransactionCallback, public IRendererHost, public iBacklight, public iRectFiller
     {
     private:
@@ -478,7 +478,7 @@ namespace spilcd16
                     .channel    = LEDC_CHANNEL_0,
                     .intr_type  = LEDC_INTR_DISABLE,
                     .timer_sel  = LEDC_TIMER_0,
-                    .duty       = 0,
+                    .duty       = BACKLIGHT_ON_PWM,
                     .hpoint     = 0,
                     .flags{.output_invert=0}
                 };
