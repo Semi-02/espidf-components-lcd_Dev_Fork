@@ -141,6 +141,7 @@ namespace spilcd16
 #define LCD135x240_0 135, 240, 52, 40, spilcd16::eOrientation::NORMAL
 #define LCD135x240_90 240, 135, 40, 52, spilcd16::eOrientation::EXY_MX_90
 #define LCD240x240_0 240, 240, 0, 0, spilcd16::eOrientation::NORMAL
+#define LCD240x240_180 240, 240, 0, 80, spilcd16::eOrientation::MX_MY_180
     
     class FilledRectRenderer : public IAsyncRenderer
     {
