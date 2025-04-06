@@ -192,7 +192,7 @@ class GlyphHelper
                 endX = gh.startX + gh.glyph_dsc->box_w;
                 if (endX >= LINE_WIDTH_PIXELS)
                 {
-                    ESP_LOGW(TAG, "NOT push GlyphIndex, posX=%lu endX=%d, startX=%d", posX_units, endX, gh.startX);
+                    ESP_LOGD(TAG, "NOT push GlyphIndex, posX=%lu endX=%d, startX=%d", posX_units, endX, gh.startX);
                     break; // Damit ist sicher gestellt, dass man bei der Ausgabe keinerlei überprüfung machen muss, ob irgendwelche Grenzen überschritten werden -->einfach glyphs zeichnen und gut!
                 }
                 ESP_LOGD(TAG, "Pushed GlyphIndex, posX=%lu endX=%d, startOfBitmapX=%d", posX_units, endX, gh.startX);
